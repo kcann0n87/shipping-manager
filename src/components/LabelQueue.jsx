@@ -1,10 +1,33 @@
 import { useState } from 'react'
 
-export default function LabelQueue({ queue, sender, packageDefaults, labelResults, onLabelResults, onUpdateQueue, onRemove, onClearQueue, onShowPrint }) {
+export default function LabelQueue({ queue, sender, packageDefaults, labelResults, onLabelResults, onUpdateQueue, onRemove, onClearQueue, onShowPrint, onSaveHistory }) {
   const results = labelResults
   const setResults = onLabelResults
   const [generating, setGenerating] = useState(false)
   const [editingPkg, setEditingPkg] = useState(null) // order id being edited
+  const [editingAddr, setEditingAddr] = useState(null) // order id being address-edited
+  const [bulkPkg, setBulkPkg] = useState({
+    length: packageDefaults.length,
+    width: packageDefaults.width,
+    height: packageDefaults.height,
+    weight: packageDefaults.weight,
+  })
+  const [bulkApplied, setBulkApplied] = useState(false)
+
+  const applyBulkPkg = () => {
+    onUpdateQueue(prev => prev.map(o => {
+      if (results[o.id]) return o // skip already-generated labels
+      return {
+        ...o,
+        pkgLength: bulkPkg.length,
+        pkgWidth: bulkPkg.width,
+        pkgHeight: bulkPkg.height,
+        pkgWeight: bulkPkg.weight,
+      }
+    }))
+    setBulkApplied(true)
+    setTimeout(() => setBulkApplied(false), 1500)
+  }
 
   const pendingCount = queue.filter(o => !results[o.id]).length
   const successCount = Object.values(results).filter(r => r.success).length
@@ -36,6 +59,12 @@ export default function LabelQueue({ queue, sender, packageDefaults, labelResult
     weight: order.pkgWeight ?? packageDefaults.weight,
     description: order.pkgDescription ?? packageDefaults.description,
   })
+
+  const updateOrderField = (orderId, field, value) => {
+    onUpdateQueue(prev => prev.map(o =>
+      o.id === orderId ? { ...o, [field]: value } : o
+    ))
+  }
 
   const updateOrderPkg = (orderId, field, value) => {
     onUpdateQueue(prev => prev.map(o =>
@@ -74,6 +103,7 @@ export default function LabelQueue({ queue, sender, packageDefaults, labelResult
               orderNumber: o.orderNumber,
               recipient: {
                 name: o.buyerName,
+                company: o.company || '',
                 street: o.street,
                 street2: o.street2 || '',
                 city: o.city,
@@ -89,13 +119,24 @@ export default function LabelQueue({ queue, sender, packageDefaults, labelResult
       const data = await res.json()
       if (data.results) {
         const newResults = { ...results }
+        const justGeneratedOrders = []
         for (const r of data.results) {
           const order = orders.find(o => o.orderNumber === r.orderNumber)
           if (order) {
             newResults[order.id] = r
+            justGeneratedOrders.push(order)
           }
         }
         setResults(newResults)
+        // Save batch to history (only the orders we just processed)
+        if (onSaveHistory && justGeneratedOrders.length > 0) {
+          // Build a results map for just these orders
+          const batchResults = justGeneratedOrders.reduce((acc, o) => {
+            acc[o.id] = newResults[o.id]
+            return acc
+          }, {})
+          onSaveHistory(justGeneratedOrders, batchResults)
+        }
       }
     } catch (err) {
       console.error('Label generation failed:', err)
@@ -124,6 +165,75 @@ export default function LabelQueue({ queue, sender, packageDefaults, labelResult
     <div>
       <div className="card">
         <h2>Label Queue</h2>
+
+        <div style={{
+          background: 'var(--surface2)',
+          borderRadius: 6,
+          padding: '12px 14px',
+          marginBottom: 14,
+          display: 'flex',
+          gap: 10,
+          alignItems: 'flex-end',
+          flexWrap: 'wrap',
+        }}>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', alignSelf: 'center', marginRight: 6 }}>
+            Bulk override:
+          </div>
+          <div className="form-group">
+            <label style={{ fontSize: '0.7rem' }}>Length (in)</label>
+            <input
+              type="number"
+              value={bulkPkg.length}
+              onChange={e => setBulkPkg(p => ({ ...p, length: Number(e.target.value) }))}
+              style={{ width: 70, padding: '5px 8px' }}
+              min={1}
+            />
+          </div>
+          <div className="form-group">
+            <label style={{ fontSize: '0.7rem' }}>Width (in)</label>
+            <input
+              type="number"
+              value={bulkPkg.width}
+              onChange={e => setBulkPkg(p => ({ ...p, width: Number(e.target.value) }))}
+              style={{ width: 70, padding: '5px 8px' }}
+              min={1}
+            />
+          </div>
+          <div className="form-group">
+            <label style={{ fontSize: '0.7rem' }}>Height (in)</label>
+            <input
+              type="number"
+              value={bulkPkg.height}
+              onChange={e => setBulkPkg(p => ({ ...p, height: Number(e.target.value) }))}
+              style={{ width: 70, padding: '5px 8px' }}
+              min={1}
+            />
+          </div>
+          <div className="form-group">
+            <label style={{ fontSize: '0.7rem' }}>Weight (lbs)</label>
+            <input
+              type="number"
+              value={bulkPkg.weight}
+              onChange={e => setBulkPkg(p => ({ ...p, weight: Number(e.target.value) }))}
+              style={{ width: 80, padding: '5px 8px' }}
+              min={0.1}
+              step={0.1}
+            />
+          </div>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={applyBulkPkg}
+            disabled={pendingCount === 0}
+          >
+            Apply to All Pending
+          </button>
+          {bulkApplied && (
+            <span style={{ color: 'var(--success)', fontSize: '0.8rem', alignSelf: 'center' }}>
+              Applied!
+            </span>
+          )}
+        </div>
+
         <div className="queue-summary">
           <div className="queue-stat">
             <span className="num">{queue.length}</span>
@@ -215,7 +325,19 @@ export default function LabelQueue({ queue, sender, packageDefaults, labelResult
                       </td>
                       <td>{order.orderNumber}</td>
                       <td>{order.buyerName}</td>
-                      <td>{order.city}, {order.state} {order.zip}</td>
+                      <td>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setEditingAddr(editingAddr === order.id ? null : order.id)}
+                          disabled={!!result}
+                          style={{ textAlign: 'left', whiteSpace: 'nowrap' }}
+                        >
+                          {order.buyerName}{order.company ? ` / ${order.company}` : ''}<br/>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                            {order.street}{order.street2 ? `, ${order.street2}` : ''}, {order.city}, {order.state} {order.zip}
+                          </span>
+                        </button>
+                      </td>
                       <td>
                         <button
                           className="btn btn-ghost btn-sm"
@@ -264,6 +386,76 @@ export default function LabelQueue({ queue, sender, packageDefaults, labelResult
                         </button>
                       </td>
                     </tr>
+                    {editingAddr === order.id && !result && (
+                      <tr key={`${order.id}-addr`}>
+                        <td colSpan={8} style={{ background: 'var(--surface2)', padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                            <div className="form-group">
+                              <label style={{ fontSize: '0.7rem' }}>Name</label>
+                              <input
+                                value={order.buyerName}
+                                onChange={e => updateOrderField(order.id, 'buyerName', e.target.value)}
+                                style={{ width: 160, padding: '5px 8px' }}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label style={{ fontSize: '0.7rem' }}>Business Name</label>
+                              <input
+                                value={order.company || ''}
+                                onChange={e => updateOrderField(order.id, 'company', e.target.value)}
+                                style={{ width: 160, padding: '5px 8px' }}
+                                placeholder="Optional"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label style={{ fontSize: '0.7rem' }}>Address Line 1</label>
+                              <input
+                                value={order.street}
+                                onChange={e => updateOrderField(order.id, 'street', e.target.value)}
+                                style={{ width: 200, padding: '5px 8px' }}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label style={{ fontSize: '0.7rem' }}>Address Line 2</label>
+                              <input
+                                value={order.street2 || ''}
+                                onChange={e => updateOrderField(order.id, 'street2', e.target.value)}
+                                style={{ width: 140, padding: '5px 8px' }}
+                                placeholder="Apt, Suite, etc."
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label style={{ fontSize: '0.7rem' }}>City</label>
+                              <input
+                                value={order.city}
+                                onChange={e => updateOrderField(order.id, 'city', e.target.value)}
+                                style={{ width: 130, padding: '5px 8px' }}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label style={{ fontSize: '0.7rem' }}>State</label>
+                              <input
+                                value={order.state}
+                                onChange={e => updateOrderField(order.id, 'state', e.target.value)}
+                                style={{ width: 50, padding: '5px 8px' }}
+                                maxLength={2}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label style={{ fontSize: '0.7rem' }}>Zip</label>
+                              <input
+                                value={order.zip}
+                                onChange={e => updateOrderField(order.id, 'zip', e.target.value)}
+                                style={{ width: 90, padding: '5px 8px' }}
+                              />
+                            </div>
+                            <button className="btn btn-primary btn-sm" onClick={() => setEditingAddr(null)}>
+                              Done
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
                     {isEditing && (
                       <tr key={`${order.id}-pkg`}>
                         <td colSpan={8} style={{ background: 'var(--surface2)', padding: '12px 16px' }}>

@@ -5,14 +5,18 @@ import EbayOrders from './components/EbayOrders'
 import AmazonOrders from './components/AmazonOrders'
 import LabelQueue from './components/LabelQueue'
 import PrintView from './components/PrintView'
+import History from './components/History'
 
 const TABS = [
   { id: 'tcgplayer', label: 'TCGPlayer' },
   { id: 'ebay', label: 'eBay' },
   { id: 'amazon', label: 'Amazon' },
   { id: 'queue', label: 'Label Queue' },
+  { id: 'history', label: 'History' },
   { id: 'settings', label: 'Settings' },
 ]
+
+const HISTORY_CAP = 20 // keep last 20 batches
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('tcgplayer')
@@ -52,8 +56,64 @@ export default function App() {
   // Label results (keyed by order id)
   const [labelResults, setLabelResults] = useState({})
 
-  // Print view
+  // History of past batches
+  const [history, setHistory] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('label_history')) || []
+    } catch {
+      return []
+    }
+  })
+
+  const saveHistoryBatch = useCallback((orders, results) => {
+    // Only snapshot orders that produced a result
+    const ordersWithResults = orders.filter(o => results[o.id])
+    if (ordersWithResults.length === 0) return
+    const batch = {
+      id: `batch-${Date.now()}`,
+      timestamp: Date.now(),
+      orders: ordersWithResults,
+      results: ordersWithResults.reduce((acc, o) => {
+        acc[o.id] = results[o.id]
+        return acc
+      }, {}),
+    }
+    setHistory(prev => {
+      const next = [batch, ...prev].slice(0, HISTORY_CAP)
+      try {
+        localStorage.setItem('label_history', JSON.stringify(next))
+      } catch (err) {
+        // localStorage full — drop oldest until it fits
+        let trimmed = next
+        while (trimmed.length > 1) {
+          trimmed = trimmed.slice(0, -1)
+          try {
+            localStorage.setItem('label_history', JSON.stringify(trimmed))
+            break
+          } catch {}
+        }
+        return trimmed
+      }
+      return next
+    })
+  }, [])
+
+  const deleteHistoryBatch = useCallback((batchId) => {
+    setHistory(prev => {
+      const next = prev.filter(b => b.id !== batchId)
+      localStorage.setItem('label_history', JSON.stringify(next))
+      return next
+    })
+  }, [])
+
+  const clearHistory = useCallback(() => {
+    setHistory([])
+    localStorage.removeItem('label_history')
+  }, [])
+
+  // Print view (used both for current queue and for re-printing from history)
   const [showPrint, setShowPrint] = useState(false)
+  const [printBatch, setPrintBatch] = useState(null) // null = use current queue, or { orders, results }
 
   // Toast
   const [toast, setToast] = useState(null)
@@ -112,7 +172,11 @@ export default function App() {
   return (
     <div className="app">
       {showPrint && (
-        <PrintView queue={queue} results={labelResults} onClose={() => setShowPrint(false)} />
+        <PrintView
+          queue={printBatch ? printBatch.orders : queue}
+          results={printBatch ? printBatch.results : labelResults}
+          onClose={() => { setShowPrint(false); setPrintBatch(null) }}
+        />
       )}
 
       <header>
@@ -187,7 +251,17 @@ export default function App() {
           onUpdateQueue={setQueue}
           onRemove={removeFromQueue}
           onClearQueue={() => { setQueue([]); setLabelResults({}) }}
-          onShowPrint={() => setShowPrint(true)}
+          onShowPrint={() => { setPrintBatch(null); setShowPrint(true) }}
+          onSaveHistory={saveHistoryBatch}
+        />
+      )}
+
+      {activeTab === 'history' && (
+        <History
+          history={history}
+          onDelete={deleteHistoryBatch}
+          onClearAll={clearHistory}
+          onReprint={(batch) => { setPrintBatch(batch); setShowPrint(true) }}
         />
       )}
 
