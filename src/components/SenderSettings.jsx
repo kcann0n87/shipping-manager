@@ -17,11 +17,24 @@ const DEFAULT_PACKAGE = {
   description: 'Trading Cards',
 }
 
-export default function SenderSettings({ sender, onSave, packageDefaults, onSavePackage }) {
+export default function SenderSettings({ sender, onSave, packageDefaults, onSavePackage, defaultServiceSpeed, onSaveServiceSpeed }) {
   const [form, setForm] = useState(sender || DEFAULT_SENDER)
   const [pkgForm, setPkgForm] = useState(packageDefaults || DEFAULT_PACKAGE)
   const [saved, setSaved] = useState(false)
   const [pkgSaved, setPkgSaved] = useState(false)
+  const [services, setServices] = useState(null) // { "Service Name": price }
+  const [servicesError, setServicesError] = useState(null)
+  const [svcSaved, setSvcSaved] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/services')
+      .then(r => r.json())
+      .then(data => {
+        if (data?.data) setServices(data.data)
+        else setServicesError(data?.error || 'Could not load services')
+      })
+      .catch(err => setServicesError(err.message))
+  }, [])
 
   useEffect(() => {
     if (sender) setForm(sender)
@@ -82,6 +95,42 @@ export default function SenderSettings({ sender, onSave, packageDefaults, onSave
           </button>
           {saved && <span style={{ color: 'var(--success)', alignSelf: 'center', fontSize: '0.85rem' }}>Saved!</span>}
         </div>
+      </div>
+
+      <div className="card">
+        <h2>Default Shipping Service</h2>
+        <h3>Used for new labels unless overridden in the Label Queue</h3>
+        {servicesError && (
+          <div style={{ color: 'var(--danger)', fontSize: '0.85rem', marginBottom: 10 }}>
+            Couldn't load services from ShipAway: {servicesError}
+          </div>
+        )}
+        <div className="form-grid">
+          <div className="form-group full">
+            <label>USPS Service</label>
+            <select
+              value={defaultServiceSpeed || 'USPS Priority (9488 Series)'}
+              onChange={e => {
+                onSaveServiceSpeed(e.target.value)
+                setSvcSaved(true)
+                setTimeout(() => setSvcSaved(false), 1500)
+              }}
+            >
+              {/* Show currently saved one even if API list hasn't loaded yet */}
+              {(!services || !Object.keys(services).includes((defaultServiceSpeed || '').replace(/^USPS /, ''))) && defaultServiceSpeed && (
+                <option value={defaultServiceSpeed}>{defaultServiceSpeed}</option>
+              )}
+              {services && Object.entries(services)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([name, price]) => (
+                  <option key={name} value={`USPS ${name}`}>
+                    USPS {name} — ${price.toFixed(2)}
+                  </option>
+                ))}
+            </select>
+          </div>
+        </div>
+        {svcSaved && <span style={{ color: 'var(--success)', fontSize: '0.85rem' }}>Saved!</span>}
       </div>
 
       <div className="card">

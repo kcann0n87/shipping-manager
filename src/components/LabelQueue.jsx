@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
-export default function LabelQueue({ queue, sender, packageDefaults, labelResults, onLabelResults, onUpdateQueue, onRemove, onClearQueue, onShowPrint, onSaveHistory }) {
+export default function LabelQueue({ queue, sender, packageDefaults, defaultServiceSpeed, labelResults, onLabelResults, onUpdateQueue, onRemove, onClearQueue, onShowPrint, onSaveHistory }) {
   const results = labelResults
   const setResults = onLabelResults
   const [generating, setGenerating] = useState(false)
@@ -13,6 +13,20 @@ export default function LabelQueue({ queue, sender, packageDefaults, labelResult
     weight: packageDefaults.weight,
   })
   const [bulkApplied, setBulkApplied] = useState(false)
+  const [bulkService, setBulkService] = useState(defaultServiceSpeed || 'USPS Priority (9488 Series)')
+  const [services, setServices] = useState(null)
+
+  useEffect(() => {
+    fetch('/api/services').then(r => r.json()).then(d => { if (d?.data) setServices(d.data) }).catch(() => {})
+  }, [])
+
+  const applyBulkService = () => {
+    onUpdateQueue(prev => prev.map(o =>
+      results[o.id] ? o : { ...o, serviceSpeed: bulkService }
+    ))
+    setBulkApplied(true)
+    setTimeout(() => setBulkApplied(false), 1500)
+  }
 
   const applyBulkPkg = () => {
     onUpdateQueue(prev => prev.map(o => {
@@ -90,6 +104,7 @@ export default function LabelQueue({ queue, sender, packageDefaults, labelResult
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          defaultServiceSpeed: defaultServiceSpeed || 'USPS Priority (9488 Series)',
           sender: {
             name: sender.name,
             street: sender.street2 ? `${sender.street}, ${sender.street2}` : sender.street,
@@ -101,6 +116,7 @@ export default function LabelQueue({ queue, sender, packageDefaults, labelResult
             const pkg = getPkg(o)
             return {
               orderNumber: o.orderNumber,
+              serviceSpeed: o.serviceSpeed || undefined,
               recipient: {
                 name: o.buyerName,
                 company: o.company || '',
@@ -225,7 +241,34 @@ export default function LabelQueue({ queue, sender, packageDefaults, labelResult
             onClick={applyBulkPkg}
             disabled={pendingCount === 0}
           >
-            Apply to All Pending
+            Apply Size to All Pending
+          </button>
+          <div style={{ flexBasis: '100%', height: 0 }} />
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', alignSelf: 'center', marginRight: 6 }}>
+            Bulk service:
+          </div>
+          <div className="form-group" style={{ flex: 1, minWidth: 240 }}>
+            <label style={{ fontSize: '0.7rem' }}>USPS Service</label>
+            <select
+              value={bulkService}
+              onChange={e => setBulkService(e.target.value)}
+              style={{ padding: '5px 8px', width: '100%' }}
+            >
+              {services
+                ? Object.entries(services).sort(([a], [b]) => a.localeCompare(b)).map(([name, price]) => (
+                    <option key={name} value={`USPS ${name}`}>
+                      USPS {name} — ${price.toFixed(2)}
+                    </option>
+                  ))
+                : <option value={bulkService}>{bulkService}</option>}
+            </select>
+          </div>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={applyBulkService}
+            disabled={pendingCount === 0}
+          >
+            Apply Service to All Pending
           </button>
           {bulkApplied && (
             <span style={{ color: 'var(--success)', fontSize: '0.8rem', alignSelf: 'center' }}>
@@ -508,6 +551,20 @@ export default function LabelQueue({ queue, sender, packageDefaults, labelResult
                                 onChange={e => updateOrderPkg(order.id, 'pkgDescription', e.target.value)}
                                 style={{ width: 140, padding: '5px 8px' }}
                               />
+                            </div>
+                            <div className="form-group" style={{ minWidth: 220 }}>
+                              <label style={{ fontSize: '0.7rem' }}>USPS Service</label>
+                              <select
+                                value={order.serviceSpeed || defaultServiceSpeed || 'USPS Priority (9488 Series)'}
+                                onChange={e => updateOrderField(order.id, 'serviceSpeed', e.target.value)}
+                                style={{ padding: '5px 8px', width: '100%' }}
+                              >
+                                {services
+                                  ? Object.entries(services).sort(([a], [b]) => a.localeCompare(b)).map(([name, price]) => (
+                                      <option key={name} value={`USPS ${name}`}>USPS {name} — ${price.toFixed(2)}</option>
+                                    ))
+                                  : <option value={order.serviceSpeed || defaultServiceSpeed}>{order.serviceSpeed || defaultServiceSpeed}</option>}
+                              </select>
                             </div>
                             {hasOverride && (
                               <button className="btn btn-ghost btn-sm" onClick={() => resetOrderPkg(order.id)}>

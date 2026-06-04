@@ -34,7 +34,7 @@ async function getSession() {
   return data;
 }
 
-export async function createLabel(sender, recipient, pkg, orderRef) {
+export async function createLabel(sender, recipient, pkg, orderRef, serviceSpeed) {
   // Ensure we have a session cookie
   if (!sessionCookie) {
     await getSession();
@@ -42,7 +42,7 @@ export async function createLabel(sender, recipient, pkg, orderRef) {
 
   const body = {
     uuid: API_KEY,
-    service_speed: 'USPS Priority (9488 Series)',
+    service_speed: serviceSpeed || 'USPS Priority (9488 Series)',
     sender: {
       name: sender.name,
       company: sender.company || '',

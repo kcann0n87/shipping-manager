@@ -42,6 +42,16 @@ export default function App() {
     localStorage.setItem('package_defaults', JSON.stringify(data))
   }
 
+  // Default USPS service speed
+  const [defaultServiceSpeed, setDefaultServiceSpeed] = useState(() => {
+    return localStorage.getItem('default_service_speed') || 'USPS Priority (9488 Series)'
+  })
+
+  const saveDefaultServiceSpeed = (val) => {
+    setDefaultServiceSpeed(val)
+    localStorage.setItem('default_service_speed', val)
+  }
+
   // Orders by source
   const [tcgOrders, setTcgOrders] = useState([])
   const [ebayOrders, setEbayOrders] = useState([])
@@ -246,6 +256,7 @@ export default function App() {
           queue={queue}
           sender={sender}
           packageDefaults={packageDefaults}
+          defaultServiceSpeed={defaultServiceSpeed}
           labelResults={labelResults}
           onLabelResults={setLabelResults}
           onUpdateQueue={setQueue}
@@ -271,6 +282,8 @@ export default function App() {
           onSave={saveSender}
           packageDefaults={packageDefaults}
           onSavePackage={savePackageDefaults}
+          defaultServiceSpeed={defaultServiceSpeed}
+          onSaveServiceSpeed={saveDefaultServiceSpeed}
         />
       )}
 

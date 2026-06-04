@@ -13,8 +13,8 @@ app.use(express.json());
 // Proxy label creation to ShipAway.io
 app.post('/api/labels', async (req, res) => {
   try {
-    const { sender, recipient, package: pkg, orderRef } = req.body;
-    const result = await createLabel(sender, recipient, pkg, orderRef);
+    const { sender, recipient, package: pkg, orderRef, serviceSpeed } = req.body;
+    const result = await createLabel(sender, recipient, pkg, orderRef, serviceSpeed);
     res.json(result);
   } catch (err) {
     console.error('Label creation error:', err.message);
@@ -25,11 +25,12 @@ app.post('/api/labels', async (req, res) => {
 // Batch label creation
 app.post('/api/labels/batch', async (req, res) => {
   try {
-    const { sender, orders } = req.body;
+    const { sender, orders, defaultServiceSpeed } = req.body;
     const results = [];
     for (const order of orders) {
       try {
-        const result = await createLabel(sender, order.recipient, order.package || {}, order.orderNumber);
+        const speed = order.serviceSpeed || defaultServiceSpeed;
+        const result = await createLabel(sender, order.recipient, order.package || {}, order.orderNumber, speed);
         results.push({ orderNumber: order.orderNumber, success: true, data: result });
       } catch (err) {
         results.push({ orderNumber: order.orderNumber, success: false, error: err.message });
@@ -38,6 +39,18 @@ app.post('/api/labels/batch', async (req, res) => {
     res.json({ results });
   } catch (err) {
     console.error('Batch label error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// List USPS services from ShipAway (live, so new services show up automatically)
+app.get('/api/services', async (req, res) => {
+  try {
+    const r = await fetch('https://shipaway.io/api/v1/usps/list');
+    const data = await r.json();
+    res.json(data);
+  } catch (err) {
+    console.error('Services fetch error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
