@@ -109,7 +109,7 @@ export default function SenderSettings({ sender, onSave, packageDefaults, onSave
           <div className="form-group full">
             <label>USPS Service</label>
             <select
-              value={defaultServiceSpeed || 'USPS Priority (9488 Series)'}
+              value={defaultServiceSpeed || 'USPS Priority Pitney Bowes'}
               onChange={e => {
                 onSaveServiceSpeed(e.target.value)
                 setSvcSaved(true)

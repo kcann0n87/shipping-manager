@@ -42,7 +42,7 @@ export async function createLabel(sender, recipient, pkg, orderRef, serviceSpeed
 
   const body = {
     uuid: API_KEY,
-    service_speed: serviceSpeed || 'USPS Priority (9488 Series)',
+    service_speed: serviceSpeed || 'USPS Priority Pitney Bowes',
     sender: {
       name: sender.name,
       company: sender.company || '',

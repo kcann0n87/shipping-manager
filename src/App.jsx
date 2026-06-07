@@ -44,7 +44,7 @@ export default function App() {
 
   // Default USPS service speed
   const [defaultServiceSpeed, setDefaultServiceSpeed] = useState(() => {
-    return localStorage.getItem('default_service_speed') || 'USPS Priority (9488 Series)'
+    return localStorage.getItem('default_service_speed') || 'USPS Priority Pitney Bowes'
   })
 
   const saveDefaultServiceSpeed = (val) => {
