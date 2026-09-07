@@ -28,7 +28,10 @@ async function getSession() {
 
   const data = await res.json();
   if (!data.success) {
-    throw new Error('Failed to authenticate with ShipAway');
+    const detail = data.message || `HTTP ${res.status}`;
+    const keyPreview = API_KEY ? `${API_KEY.slice(0, 4)}...${API_KEY.slice(-4)} (${API_KEY.length} chars)` : '(empty)';
+    console.error('ShipAway auth failed. Key used:', keyPreview, 'response:', data);
+    throw new Error(`Failed to authenticate with ShipAway: ${detail}`);
   }
 
   return data;
@@ -42,7 +45,7 @@ export async function createLabel(sender, recipient, pkg, orderRef, serviceSpeed
 
   const body = {
     uuid: API_KEY,
-    service_speed: serviceSpeed || 'USPS Priority Pitney Bowes',
+    service_speed: serviceSpeed || 'USPS Priority Pitney Bowes V2',
     sender: {
       name: sender.name,
       company: sender.company || '',

@@ -13,7 +13,7 @@ export default function LabelQueue({ queue, sender, packageDefaults, defaultServ
     weight: packageDefaults.weight,
   })
   const [bulkApplied, setBulkApplied] = useState(false)
-  const [bulkService, setBulkService] = useState(defaultServiceSpeed || 'USPS Priority Pitney Bowes')
+  const [bulkService, setBulkService] = useState(defaultServiceSpeed || 'USPS Priority Pitney Bowes V2')
   const [services, setServices] = useState(null)
 
   useEffect(() => {
@@ -104,7 +104,7 @@ export default function LabelQueue({ queue, sender, packageDefaults, defaultServ
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          defaultServiceSpeed: defaultServiceSpeed || 'USPS Priority Pitney Bowes',
+          defaultServiceSpeed: defaultServiceSpeed || 'USPS Priority Pitney Bowes V2',
           sender: {
             name: sender.name,
             street: sender.street2 ? `${sender.street}, ${sender.street2}` : sender.street,
@@ -555,7 +555,7 @@ export default function LabelQueue({ queue, sender, packageDefaults, defaultServ
                             <div className="form-group" style={{ minWidth: 220 }}>
                               <label style={{ fontSize: '0.7rem' }}>USPS Service</label>
                               <select
-                                value={order.serviceSpeed || defaultServiceSpeed || 'USPS Priority Pitney Bowes'}
+                                value={order.serviceSpeed || defaultServiceSpeed || 'USPS Priority Pitney Bowes V2'}
                                 onChange={e => updateOrderField(order.id, 'serviceSpeed', e.target.value)}
                                 style={{ padding: '5px 8px', width: '100%' }}
                               >
