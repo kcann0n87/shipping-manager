@@ -116,7 +116,9 @@ export async function createLabel(sender, recipient, pkg, orderRef, serviceSpeed
   }
 
   if (!data.success) {
-    throw new Error(data.message || 'ShipAway API error');
+    console.error('ShipAway label rejected. Response:', JSON.stringify(data));
+    const detail = data.message || data.error || data.errors || data;
+    throw new Error(`ShipAway API error: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
   }
 
   return data;
