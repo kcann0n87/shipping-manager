@@ -1,7 +1,8 @@
 import 'dotenv/config';
 
 const API_KEY = process.env.SHIPAWAY_API_KEY;
-const PHONE = process.env.SHIPAWAY_PHONE || '0000000000';
+// ShipAway rejects formatted numbers like 561-555-1234, so keep digits only
+const PHONE = (process.env.SHIPAWAY_PHONE || '').replace(/\D/g, '') || '0000000000';
 const BASE_URL = 'https://shipaway.io';
 
 if (!API_KEY) {
@@ -54,7 +55,7 @@ export async function createLabel(sender, recipient, pkg, orderRef, serviceSpeed
       city: sender.city,
       state: sender.state,
       postal_code: sender.postal_code || sender.zip,
-      phone: sender.phone || PHONE,
+      phone: (sender.phone || '').replace(/\D/g, '') || PHONE,
     },
     recipient: {
       name: recipient.name,
@@ -64,7 +65,7 @@ export async function createLabel(sender, recipient, pkg, orderRef, serviceSpeed
       city: recipient.city,
       state: recipient.state,
       postal_code: recipient.postal_code || recipient.zip,
-      phone: recipient.phone || '0000000000',
+      phone: (recipient.phone || '').replace(/\D/g, '') || '0000000000',
     },
     package: {
       length: pkg.length || 12,
