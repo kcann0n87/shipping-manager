@@ -19,7 +19,14 @@ export async function parseAmazonPackingSlips(buffers) {
 }
 
 function splitSlips(text) {
-  // Each packing slip has exactly one "Order ID:" line. Use it as the anchor.
+  // Each slip starts with "Shipping Address:" and has its Ship To block,
+  // Order ID and product details after it, so split at the start of each slip.
+  const starts = [...text.matchAll(/Shipping Address:/g)].map(m => m.index);
+  if (starts.length > 1) {
+    return starts.map((start, i) => text.slice(start, starts[i + 1] ?? text.length));
+  }
+
+  // Fallback for slips without that header: anchor on "Order ID:" lines.
   const orderIdRegex = /Order ID:\s*[\w-]+/g;
   const matches = [...text.matchAll(orderIdRegex)];
   if (matches.length === 0) return [];
@@ -33,6 +40,30 @@ function splitSlips(text) {
     slips.push(text.slice(start, end));
   }
   return slips;
+}
+
+const STATE_ABBREVIATIONS = {
+  alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA',
+  colorado: 'CO', connecticut: 'CT', delaware: 'DE', 'district of columbia': 'DC',
+  florida: 'FL', georgia: 'GA', hawaii: 'HI', idaho: 'ID', illinois: 'IL',
+  indiana: 'IN', iowa: 'IA', kansas: 'KS', kentucky: 'KY', louisiana: 'LA',
+  maine: 'ME', maryland: 'MD', massachusetts: 'MA', michigan: 'MI', minnesota: 'MN',
+  mississippi: 'MS', missouri: 'MO', montana: 'MT', nebraska: 'NE', nevada: 'NV',
+  'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
+  'north carolina': 'NC', 'north dakota': 'ND', ohio: 'OH', oklahoma: 'OK',
+  oregon: 'OR', pennsylvania: 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+  'south dakota': 'SD', tennessee: 'TN', texas: 'TX', utah: 'UT', vermont: 'VT',
+  virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI',
+  wyoming: 'WY', 'puerto rico': 'PR', guam: 'GU', 'virgin islands': 'VI',
+  'u.s. virgin islands': 'VI', 'american samoa': 'AS', 'northern mariana islands': 'MP',
+  'armed forces americas': 'AA', 'armed forces europe': 'AE', 'armed forces pacific': 'AP',
+};
+
+// Amazon writes the state as "NY" on some slips and "Iowa" on others
+function toStateCode(state) {
+  const trimmed = state.trim();
+  if (/^[A-Za-z]{2}$/.test(trimmed)) return trimmed.toUpperCase();
+  return STATE_ABBREVIATIONS[trimmed.toLowerCase()] || null;
 }
 
 function parseOneSlip(text) {
@@ -59,11 +90,12 @@ function parseOneSlip(text) {
   const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
   if (lines.length < 3) return null;
 
-  // Last line should be "City, ST ZIP"
-  const cityStateZipRegex = /^(.+),\s*([A-Z]{2})\s+([\d-]+)$/;
+  // Last line should be "City, ST ZIP" or "City, State Name ZIP"
+  const cityStateZipRegex = /^(.+),\s*([A-Za-z][A-Za-z. ]*?)\s+(\d{5}(?:-\d{4})?)$/;
   let cityLineIdx = -1;
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (cityStateZipRegex.test(lines[i])) {
+    const m = lines[i].match(cityStateZipRegex);
+    if (m && toStateCode(m[2])) {
       cityLineIdx = i;
       break;
     }
@@ -72,7 +104,7 @@ function parseOneSlip(text) {
 
   const cityMatch = lines[cityLineIdx].match(cityStateZipRegex);
   const city = cityMatch[1].trim();
-  const state = cityMatch[2];
+  const state = toStateCode(cityMatch[2]);
   const zip = cityMatch[3];
 
   const name = lines[0];
@@ -82,7 +114,8 @@ function parseOneSlip(text) {
 
   // Try to extract item summary and quantity from the "Quantity Product Details" section
   let items = '1 item';
-  const qpdIdx = text.indexOf('Quantity Product Details');
+  // The header's columns can be separated by spaces or tabs
+  const qpdIdx = text.search(/Quantity\s+Product Details/);
   if (qpdIdx !== -1) {
     const qpdBlock = text.slice(qpdIdx).split('Grand total')[0];
     // First line after the header that starts with a digit
